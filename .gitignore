@@ -1,0 +1,7 @@
+tasm
+*.EXE
+*.OBJ
+*.TD
+*.TR
+*.MAP
+*.LST
