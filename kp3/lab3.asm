@@ -44,55 +44,57 @@ main_loop:
     LEA DX, Z_FUNC_TITLE
     INT 21h
 
-    ; Ввід X
+    ; input X
     LEA DX, msg_input_x
     MOV current_prompt, DX  
     CALL input_number
-    MOV x_val, BX           ; BX повертає модуль числа
+    MOV x_val, BX           ; store the absolute value
+    ; is_negative is used in the input number procedure, which is used twice, which is why we need to store the 
+        ; sign in a separate variable for each number, so that we may use is_negative again
     MOV AL, is_negative
-    MOV x_neg, AL           ; Зберігаємо знак X
+    MOV x_neg, AL           
     
-    ; Ввід Y
+    ; input Y
     LEA DX, msg_input_y
     MOV current_prompt, DX  
     CALL input_number
     MOV y_val, BX
     MOV AL, is_negative
-    MOV y_neg, AL           ; Зберігаємо знак Y
+    MOV y_neg, AL           
     
-    ; --- ДИСПЕТЧЕР УМОВ ---
-    ; Перевірка умови 1: x < 5 і y < 5
+    ; Check conditions and execute corresponding functions
+
+    ; Condition 1: x < 5 && y < 5
     CALL check_x_less_5
-    JNE try_cond_2          ; Якщо X >= 5, перевіряємо наступну гілку
+    JNE try_cond_2          ; If X >= 5, check condition 2
     CALL check_y_less_5
-    JNE try_cond_3          ; Якщо X < 5, але Y >= 5, йдемо до умови 3
-    CALL do_calc_1          ; Виконуємо розрахунок гілки 1
+    JNE try_cond_3          ; If X < 5, but Y >= 5, check condition 3
+    CALL do_calc_1          
     JMP end_iteration
 
 try_cond_2:
-    ; Перевірка умови 2: x >= 5 і y >= 5
+    ; Condition 2: x >= 5 && y >= 5
     CALL check_x_ge_5
-    JNE try_cond_3          ; Якщо X < 5, перевіряємо умову 3
+    JNE try_cond_3          ; If X < 5, check condition 3
     CALL check_y_ge_5
-    JNE try_else            ; Якщо X >= 5, але Y < 5, йдемо в "otherwise"
-    CALL do_calc_2          ; Розрахунок гілки 2
+    JNE try_else            ; If X >= 5, but Y < 5, go to "otherwise"
+    CALL do_calc_2          
     JMP end_iteration
 
 try_cond_3:
-    ; Перевірка умови 3: x <= 0 і y > 10
+    ; Condition 3: x <= 0 && y > 10
     CALL check_x_le_0
-    JNE try_else            ; Якщо X > 0, йдемо в "otherwise"
+    JNE try_else            ; If X > 0, go to "otherwise"
     CALL check_y_gt_10
-    JNE try_else            ; Якщо Y <= 10, йдемо в "otherwise"
-    CALL do_calc_3          ; Розрахунок гілки 3
+    JNE try_else            ; If Y <= 10, go to "otherwise"
+    CALL do_calc_3          
     JMP end_iteration
 
 try_else:
-    ; Умова 4: Z = x + y (в інших випадках)
+    ; Condition 4: Z = x + y
     CALL do_calc_else
 
 end_iteration:
-    ; Питаємо, чи хоче користувач повторити цикл
     LEA DX, run_message
     CALL print_str
     MOV AH, 01H
@@ -102,75 +104,66 @@ end_iteration:
     CMP AL, 'Y'
     JE main_loop
     
-    ; Повернення управління DOS
     MOV AH, 4CH
     INT 21H
 MAIN ENDP
 
-; --- ОБЧИСЛЕННЯ УМОВИ 1: $Z = (4 + x^2) / (yx)$ ---
+; Calculate condition 1: Z = (4 + x^2) / (yx)
 do_calc_1 PROC NEAR
     MOV AX, x_val
-    MUL y_val               ; DX:AX = модуль знаменника
-    OR DX, DX               ; Якщо DX не 0, значить знаменник > 65535
-    JNZ math_overflow_c1
-    MOV CX, AX              ; Зберігаємо знаменник у CX
-    OR CX, CX               ; Перевірка на ділення на нуль
+    MUL y_val               ; DX:AX = x * y (denominator)
+    ; If DX != 0, then the result overflowed (> 65535)
+    JC math_overflow_c1
+    MOV CX, AX              ; Save the denominator in CX
+    OR CX, CX               ; Check if the denominator is zero
     JZ divide_zero_error
     
-    ; Логіка знаку результату: плюс на плюс = плюс, мінус на мінус = плюс, різні = мінус
+    ; Result sign calculation
     MOV AL, x_neg
-    XOR AL, y_neg           ; Визначаємо знак через XOR
-    PUSH AX                 ; Зберігаємо знак у стек
+    XOR AL, y_neg           ; XOR sets 1, if the signs of the operands are different, and 0, if they are the same
+    PUSH AX                 ; Save the result sign in the stack
     
-    ; Розрахунок чисельника (x^2 + 4)
+    ; Calculating the numerator (x^2 + 4)
     MOV AX, x_val
     MUL x_val               ; DX:AX = x^2
-    ADD AX, 4
-    ADC DX, 0               ; Додаємо 4 до 32-бітного результату в DX:AX
+    ADD AX, 4               ; Add 4 to AX
+    ADC DX, 0               ; Add with carry to DX
     
-    ; Ділення 32-бітного чисельника (DX:AX) на 16-бітний знаменник (CX)
-    DIV CX                  ; AX = ціла частина, DX = остача
+    DIV CX                  ; AX = quotient, DX = remainder
     
     MOV res_quot, AX
     MOV res_rem, DX
     POP AX
-    MOV res_neg, AL         ; Повертаємо знак зі стеку
+    MOV res_neg, AL         ; Get back the result sign
     
-    ; Перевірка: якщо результат від'ємний, він не має бути більшим за 32768
+    ; Check for overflow if the number is negative
     CMP res_neg, 1
     JNE print_c1_result
     CMP res_quot, 8000H
     JA math_overflow_c1
     
 print_c1_result:
-    CALL print_complex_res  ; Друк із остачею
+    CALL print_complex_res
     RET
 math_overflow_c1: JMP math_overflow_err
 divide_zero_error: JMP div_by_zero_err
 do_calc_1 ENDP
 
-; --- ОБЧИСЛЕННЯ УМОВИ 2: $Z = 25y$ ---
+; Calculate condition 2: Z = 25y
 do_calc_2 PROC NEAR
     MOV AX, y_val
     MOV CX, 25
-    MUL CX                  ; AX = 25 * y_val
-    JC math_overflow_c2     ; Перевірка фізичного оверфлоу (>65535)
+    MUL CX              
+    JC math_overflow_c2
     
-    ; Перевірка ліміту для від'ємного числа
-    CMP y_neg, 1
-    JNE save_result_c2
-    CMP AX, 8000H
-    JA math_overflow_c2
-save_result_c2:
     MOV res_quot, AX
-    MOV AL, y_neg
-    MOV res_neg, AL
-    CALL print_simple_res   ; Друк простого результату
+    MOV res_neg, 0    
+    CALL print_simple_res
     RET
 math_overflow_c2: JMP math_overflow_err
 do_calc_2 ENDP
 
-; --- ОБЧИСЛЕННЯ УМОВИ 3: $Z = 4x$ ---
+; Calculate condition 3: Z = 4x
 do_calc_3 PROC NEAR
     MOV AX, x_val
     MOV CX, 4
@@ -189,49 +182,43 @@ save_result_c3:
 math_overflow_c3: JMP math_overflow_err
 do_calc_3 ENDP
 
-; --- ОБЧИСЛЕННЯ УМОВИ 4: $Z = x + y$ ---
+; Calculate condition 4: Z = x + y
 do_calc_else PROC NEAR
     MOV AL, x_neg
     CMP AL, y_neg
-    JNE different_signs     ; Якщо знаки різні, йдемо до віднімання
+    JNE different_signs
     
-    ; ОДНАКОВІ ЗНАКИ: додаємо модулі
     MOV AX, x_val
     ADD AX, y_val
-    JC math_overflow_else   ; Оверфлоу суми
-    CMP x_neg, 1
-    JNE save_result_c4
-    CMP AX, 8000H           ; Ліміт негативного числа
-    JA math_overflow_else
-save_result_c4:
+    JC math_overflow_else   
+    
     MOV res_quot, AX
-    MOV AL, x_neg
-    MOV res_neg, AL
+    MOV res_neg, 0          
     JMP print_else_result
 
 different_signs:
-    ; РІЗНІ ЗНАКИ: віднімаємо менший модуль від більшого
     MOV AX, x_val
     CMP AX, y_val
     JAE x_is_bigger         
-    ; Модуль Y більший: Z = Y - X, знак від Y
+    
     MOV AX, y_val
     SUB AX, x_val
     MOV res_quot, AX
     MOV AL, y_neg       
     JMP print_else_result
+    
 x_is_bigger:
-    ; Модуль X більший або рівний: Z = X - Y, знак від X
     SUB AX, y_val
     MOV res_quot, AX
     MOV AL, x_neg       
+    
 print_else_result:
     CALL print_simple_res
     RET
 math_overflow_else: JMP math_overflow_err
 do_calc_else ENDP
 
-; --- ПРОЦЕДУРИ ВИВОДУ ---
+; Output procedures
 print_simple_res PROC NEAR
     LEA DX, msg_res_z
     CALL print_str
@@ -247,14 +234,14 @@ print_complex_res PROC NEAR
     MOV AX, res_quot
     MOV BL, res_neg
     CALL print_number_with_sign
-    ; Виводимо остачу, тільки якщо вона не нуль
+    ; Only print the remainder if it's not zero
     MOV AX, res_rem
     OR AX, AX
     JZ print_exit
     LEA DX, msg_remain
     CALL print_str
     MOV AX, res_rem
-    MOV BL, 0               ; Остача завжди позитивна
+    MOV BL, 0               ; Remainder is always positive
     CALL print_number_with_sign
 print_exit: RET
 print_complex_res ENDP
@@ -269,14 +256,12 @@ div_by_zero_err:
     CALL print_str
     RET
 
-; --- ПРОЦЕДУРИ ЛОГІЧНИХ ПЕРЕВІРОК ---
-; Кожна процедура встановлює ZF=1 (успіх) або ZF=0 (невдача)
-
+; Logic for checking conditions, each sets ZF to 1 if the condition is true and 0 otherwise
 check_x_less_5:
     CMP x_neg, 1
-    JE set_true            ; Від'ємне X завжди < 5
+    JE set_true           
     CMP x_val, 5
-    JB set_true            ; Додатне X перевіряємо модуль
+    JB set_true           
     JMP set_false       
 
 check_y_less_5:
@@ -288,7 +273,7 @@ check_y_less_5:
 
 check_x_ge_5:
     CMP x_neg, 1
-    JE set_false           ; Від'ємне X ніколи не >= 5
+    JE set_false          
     CMP x_val, 5
     JAE set_true
     JMP set_false
@@ -302,14 +287,14 @@ check_y_ge_5:
 
 check_x_le_0:
     CMP x_neg, 1
-    JE set_true            ; Від'ємне X завжди <= 0
+    JE set_true            
     CMP x_val, 0
-    JE set_true            ; Нуль теж
+    JE set_true            
     JMP set_false
 
 check_y_gt_10:
     CMP y_neg, 1
-    JE set_false           ; Від'ємне Y ніколи не > 10
+    JE set_false           
     CMP y_val, 10
     JA set_true
     JMP set_false
@@ -327,71 +312,78 @@ set_false:
     POP AX
     RET
 
-; --- ПРОЦЕДУРА ВВОДУ ЧИСЛА З КЛАВІАТУРИ ---
+;INPUT PROCEDURE
 input_number PROC NEAR
 start_input:
-    ; Друкуємо запит ("Enter X/Y:")
+    ; Print current prompt
     MOV DX, current_prompt
     CALL print_str      
     
-    ; Читаємо рядок у буфер
+    ; Read user input
     MOV AH, 0Ah
     LEA DX, buf
     INT 21H
-    CALL line               ; Перехід на новий рядок
+    CALL line               
     
     XOR CX, CX
-    MOV CL, [buf + 1]       ; Реальна кількість введених символів
-    JCXZ empty_input        ; Помилка, якщо просто натиснули Enter
+    MOV CL, [buf + 1]       ; Get the input length
+    JCXZ empty_input        
     
-    XOR BX, BX              ; Очищаємо акумулятор результату
-    MOV is_negative, 0
-    LEA SI, buf + 2         ; Вказуємо на перший символ тексту
+    XOR BX, BX              ; Accumulate the result in BX
+    MOV is_negative, 0      ; Treat number as positive by default
+    LEA SI, buf + 2         ; Use SI as the input pointer, starting from the first digit
 
-    ; Перевірка наявності мінуса
+    ; Check for negative sign
     MOV AL, [SI]
     CMP AL, '-'
     JNE check_plus
-    MOV is_negative, 1      ; Встановлюємо прапорець
+    MOV is_negative, 1      
     INC SI
     DEC CX
-    JZ invalid_input        ; Помилка, якщо ввели тільки мінус
+    JZ invalid_input        ; Check if only '-' was entered
     JMP convert_loop
 
 check_plus:
-    ; Перевірка наявності плюса (просто ігноруємо його)
+    ; Skip the plus sign
     CMP AL, '+'
     JNE convert_loop
     INC SI
     DEC CX
-    JZ invalid_input
+    JZ invalid_input        ; Check if only '+' was entered
     
 convert_loop:
-    ; Основний цикл перетворення тексту в число
+    ; Convert ASCII to digit
     MOV AL, [SI]
     CMP AL, '0'
-    JB invalid_input        ; Не цифра
+    JB invalid_input        
     CMP AL, '9'
-    JA invalid_input        ; Не цифра
+    JA invalid_input        
     
     SUB AL, '0'             ; ASCII -> Digit
     XOR AH, AH
-    PUSH AX                 ; Зберігаємо цифру
+    PUSH AX                 ; Save current digit
     
     MOV AX, BX
     MOV DI, 10
-    MUL DI                  ; Множимо поточну суму на 10
-    JC overflow_pop         ; Помилка, якщо число вийшло за 16 біт
+    MUL DI      
+
+    ;overflows are getting caught here:
+
+    ;case 1: 9999 * 10 = 99990 => overflow
+    ;update the flags
+    ;if dx isnt 0 then the result overflowed, pop the digit off the stack and go to the error        
+    JC overflow_pop         
     
-    POP DX                  ; Отримуємо цифру
-    ADD AX, DX              ; Додаємо до суми
+    POP DX                  ; Get the digit off the stack and add it to the multiplication result
+    ADD AX, DX
+    ;case 2: 65530 + 6 = 65536 => overflow              
     JC overflow_input
     
-    MOV BX, AX              ; Зберігаємо результат у BX
+    MOV BX, AX              ; Accumulate the result in BX
     INC SI
     LOOP convert_loop
     
-    ; Перевірка ліміту для від'ємного числа (-32768)
+    ; Check the limit for negative numbers 
     CMP is_negative, 1
     JNE input_done
     CMP BX, 8000H
@@ -414,7 +406,7 @@ overflow_input:
     JMP start_input               
 input_number ENDP
 
-; --- ДОПОМІЖНІ ФУНКЦІЇ ---
+; Helper functions
 print_str PROC NEAR
     MOV AH, 9
     INT 21H
@@ -430,19 +422,20 @@ line PROC NEAR
     RET
 line ENDP
 
-; --- ПЕРЕТВОРЕННЯ ЧИСЛА В ТЕКСТ ТА ВИВІД НА ЕКРАН ---
+;Convert number to string and output it
 print_number_with_sign PROC NEAR
     PUSH AX
     PUSH BX
     PUSH CX
     PUSH DX
     
-    ; Виводимо мінус, якщо число від'ємне та не нуль
+    ; Output the negative sign 
     CMP BL, 1           
     JNE prepare_print
+    ; Prevent the output of '-0'
     OR AX, AX           
     JZ prepare_print
-    PUSH AX
+    PUSH AX             ; Save the result in the stack temporarily
     MOV AH, 02H
     MOV DL, '-'
     INT 21H
@@ -450,21 +443,23 @@ print_number_with_sign PROC NEAR
     
 prepare_print:
     XOR CX, CX
-    MOV BX, 10              ; Дільник
+    MOV BX, 10              ; BX will serve as the divider
     
 divide_to_stack:
-    ; Ділимо число на 10, остачу (цифру) кладемо в стек
+    ; Divide the number by 10 and push the remainder
     XOR DX, DX
     DIV BX              
-    PUSH DX             
-    INC CX
-    OR AX, AX               ; Поки є що ділити
+    PUSH DX 
+    ;get amount of digits received            
+    INC CX 
+    ;if we have something left to divide, iterate again           
+    OR AX, AX               
     JNZ divide_to_stack
     
 pop_and_print:
-    ; Дістаємо цифри зі стеку (вони там у зворотному порядку)
+    ;get the last number, turn it back to ascii and print it out
     POP DX              
-    ADD DL, '0'             ; Digit -> ASCII
+    ADD DL, '0'             
     MOV AH, 02H
     INT 21H
     LOOP pop_and_print
