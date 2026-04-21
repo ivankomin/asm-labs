@@ -32,6 +32,8 @@
                               DB 9, 9, '  / //\  --  \  4x              if x <= 0, y > 10', 13, 10
                               DB 9, 9, ' /____/       | x + y               otherwise', 13, 10
                               DB 9, 9, '              `-', 13, 10
+                              DB 9, 9, 'The absolute input range is -32768 to 65535', 13, 10
+                              DB 9, 9, ', but it heavily depends on the specific function', 13, 10
                               DB '$'
 
 .CODE
@@ -178,9 +180,6 @@ do_calc_3 PROC NEAR
     MOV AX, x_val
     MOV CX, 4
     MUL CX
-    JC math_overflow_c3
-    CMP x_neg, 1
-    JNE save_result_c3
     CMP AX, 8000H
     JA math_overflow_c3
 save_result_c3:
@@ -233,7 +232,6 @@ print_simple_res PROC NEAR
     LEA DX, msg_res_z
     CALL print_str
     MOV AX, res_quot
-    MOV BL, res_neg
     CALL print_number_with_sign
     RET
 print_simple_res ENDP
@@ -243,14 +241,13 @@ print_complex_res PROC NEAR
     CALL print_str
     ; Print the quotient
     MOV AX, res_quot
-    MOV BL, res_neg
     CALL print_number_with_sign
 
     ; Print the remainder
     LEA DX, msg_remain
     CALL print_str
     MOV AX, res_rem
-    MOV BL, 0               ; Remainder is always positive
+    MOV res_neg, 0               ; Remainder is always positive
     CALL print_number_with_sign
 print_exit: RET
 print_complex_res ENDP
@@ -362,7 +359,8 @@ check_plus:
 
 convert_loop:
     ; Convert ASCII to digit
-    MOV AL, [SI]
+    MOV AL, [SI]    CMP x_neg, 1
+    JNE save_result_c3
     CMP AL, '0'
     JB invalid_input
     CMP AL, '9'
@@ -439,7 +437,7 @@ print_number_with_sign PROC NEAR
     PUSH DX
 
     ; Output the negative sign
-    CMP BL, 1
+    CMP res_neg, 1
     JNE prepare_print
     ; Prevent the output of '-0'
     OR AX, AX
