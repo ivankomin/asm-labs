@@ -15,7 +15,8 @@
     
     msg_menu        db 13, 10, 10, "Choose an option:"
                     db 13, 10, "1 - Show Stats (Sum, Max, Min)"
-                    db 13, 10, "2 - Re-enter Array"
+                    db 13, 10, "2 - Sort Array (Ascending)"
+                    db 13, 10, "3 - Re-enter Array"
                     db 13, 10, "Any other key - Exit"
                     db 13, 10, "Your choice: $"
 
@@ -27,8 +28,10 @@
     msg_err_sum_ovf db 13, 10, "Error: Sum overflowed [-32768..65535]!$"
     
     msg_res_sum     db 13, 10, 10, "Sum of elements: $"
-    msg_res_max     db 13, 10, "Maximum element: $"
-    msg_res_min     db 13, 10, "Minimum element: $"
+    msg_res_max     db 13, 10, 10, "Maximum element: $"
+    msg_res_min     db 13, 10, 10, "Minimum element: $"
+    msg_res_sort    db 13, 10, 10, "Array sorted! Resulting array: ", "$"
+    msg_space       db "  ", "$"
 
 .code
 start:
@@ -98,6 +101,8 @@ main_menu:
     cmp bh, '1'
     je  action_stats
     cmp bh, '2'
+    je  action_sort
+    cmp bh, '3'             ; Сортування масиву
     je  input_phase
     
     jmp exit_program        
@@ -163,9 +168,63 @@ sum_overflow:
     int 21h
     jmp main_menu
 
+; ACTION: Sort and Display Array 
+action_sort:
+    call sort_array         
+
+    lea dx, msg_res_sort 
+    mov ah, 09h
+    int 21h
+
+    mov cx, n_elements
+    xor si, si
+display_loop:              
+    mov eax, mas[si]
+    call print_number
+    lea dx, msg_space       
+    mov ah, 09h
+    int 21h
+    add si, 4
+    loop display_loop
+    
+    jmp main_menu
+
 exit_program:
     mov ax, 4c00h
     int 21h
+
+; PROCEDURE: Bubble Sort
+sort_array proc near
+    mov cx, n_elements
+    dec cx                  ; outer loop counter (n-1)
+    jz sort_done
+outer_loop:
+    push cx                 ; save outer loop counter
+    mov dl, 0               ; is_swap flag
+    xor si, si              
+inner_loop:
+    mov eax, mas[si]        ; current element
+    mov ebx, mas[si+4]      ; next element
+    
+    cmp eax, ebx           
+    jle no_swap             ; if current <= next, no swap
+    
+    ; Swap elements
+    mov mas[si], ebx
+    mov mas[si+4], eax
+    mov dl, 1
+    
+no_swap:
+    add si, 4               ; move to next element
+    loop inner_loop
+    
+    pop cx
+    cmp dl, 0
+    je sort_done
+    loop outer_loop
+sort_done:
+    ret
+sort_array endp
 
 ; PROCEDURE: Input ASCII and convert to Binary
 read_input proc near
@@ -195,10 +254,10 @@ r_plus:
     dec cx
     jz r_err
 r_conv:
-    movzx ebx, byte ptr [si]
+    movzx ebx, byte ptr [si] ; copy byte to bl and fill the rest with 0
     sub bl, '0'
     jl  r_err
-    cmp bl, '9'
+    cmp bl, 9
     jg  r_err
     imul eax, 10
     add eax, ebx
