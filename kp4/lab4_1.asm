@@ -1,9 +1,10 @@
-; Ivan Komin IP-44
 .model small
 .386                
 .stack 100h
 
 .data
+    min_size equ 2
+    max_size equ 100
     mas             dd 100 dup(0)     
     n_elements      dw 0            
     
@@ -25,7 +26,7 @@
 
     msg_err_size    db 13, 10, "Error: Invalid array size!$"
     msg_err_val     db 13, 10, "Error: Invalid element!$"
-    msg_err_sum_ovf db 13, 10, "Error: Sum overflowed [-32768..65535]!$"
+    msg_err_sum_ovf db 13, 10, 10, "Error: Sum overflowed [-32768..65535]!$"
     
     msg_res_sum     db 13, 10, 10, "Sum of elements: $"
     msg_res_max     db 13, 10, 10, "Maximum element: $"
@@ -38,7 +39,7 @@ start:
     mov ax, @data
     mov ds, ax
 
-; --- INPUT ARRAY ELEMENTS ---
+; INPUT ARRAY ELEMENTS
 input_phase:
     lea dx, msg_size_p
     mov ah, 09h
@@ -48,9 +49,9 @@ input_phase:
     cmp bl, 1    ; use bl as error flag for more modularity           
     je  size_error
     
-    cmp eax, 2
+    cmp eax, min_size
     jl  size_error
-    cmp eax, 100
+    cmp eax, max_size
     jg  size_error
     
     mov n_elements, ax
@@ -67,7 +68,7 @@ start_fill:
     mov cx, n_elements
     xor si, si              
 fill_loop:
-    push cx
+    push cx     ; save loop counter because read_input also uses it
     lea dx, msg_input
     mov ah, 09h
     int 21h
@@ -88,7 +89,7 @@ store_element:
     pop cx
     loop fill_loop
 
-; --- MAIN MENU ---
+; MAIN MENU
 main_menu:
     lea dx, msg_menu
     mov ah, 09h
@@ -102,12 +103,12 @@ main_menu:
     je  action_stats
     cmp bh, '2'
     je  action_sort
-    cmp bh, '3'             ; Сортування масиву
+    cmp bh, '3'            
     je  input_phase
     
     jmp exit_program        
 
-; --- ACTION 1: Calculate sum, min and max ---
+; ACTION : Calculate sum, min and max
 action_stats:
     xor si, si
     mov cx, n_elements

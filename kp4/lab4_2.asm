@@ -3,7 +3,9 @@
 .stack 100h
 
 .data
-    matrix          dd 100 dup(0)     
+    min_size equ 2
+    max_size equ 10
+    matrix          dd (min_size * max_size) dup(0)     
     rows            dw 0            
     cols            dw 0
     is_error        db 0            
@@ -48,9 +50,9 @@ input_rows:
     cmp is_error, 1
 
     je  err_rows
-    cmp eax, 2
+    cmp eax, min_size
     jl  err_rows
-    cmp eax, 10
+    cmp eax, max_size
     jg  err_rows
 
     mov rows, ax
@@ -70,9 +72,9 @@ input_cols:
     cmp is_error, 1
 
     je  err_cols
-    cmp eax, 2
+    cmp eax, min_size
     jl  err_cols
-    cmp eax, 10
+    cmp eax, max_size
     jg  err_cols
 
     mov cols, ax
@@ -96,11 +98,13 @@ element_retry:              ; separate mark for each element
     mov ah, 09h
     int 21h
     
+    ;this prints out the [row, col] in the message
     movzx eax, bx           ; get row number and fill higher bits with 0
     call print_number
     lea dx, msg_comma
     mov ah, 09h
     int 21h
+
     movzx eax, di           ; get col number and fill higher bits with 0
     call print_number
     lea dx, msg_bracket
@@ -112,13 +116,13 @@ element_retry:              ; separate mark for each element
     je val_error
     
     mov matrix[si], eax
-    add si, 4
-    inc di
-    cmp di, cols
+    add si, 4               ;si = 0 - first bracket [0, 0], si = 4 - second bracket [0, 1] etc
+    inc di                  ;di = 0 - first col, di = 1 - second col etc
+    cmp di, cols            ; check if we reached the end of the row
     jl col_loop
     
-    inc bx
-    cmp bx, rows
+    inc bx                  ;bx = 0 - first row, bx = 1 - second row etc
+    cmp bx, rows            ; check if this was the last row
     jl row_loop
     jmp main_menu
 
@@ -126,9 +130,8 @@ val_error:
     lea dx, msg_err_val
     mov ah, 09h
     int 21h
-    jmp element_retry       ; Перепитуємо тільки цей елемент
+    jmp element_retry       
 
-; --- ГОЛОВНЕ МЕНЮ ---
 main_menu:
     lea dx, msg_menu
     mov ah, 09h
@@ -139,11 +142,12 @@ main_menu:
     cmp al, '1'
     je action_find
     cmp al, '2'
-    je input_rows           ; Повний перезапуск матриці за бажанням
+    je input_rows           
     jmp exit_program
 
-; --- ПОШУК ЕЛЕМЕНТА ---
+; find the occurrences of the target element
 action_find:
+    ;input the target element
     lea dx, msg_target_p
     mov ah, 09h
     int 21h
@@ -157,40 +161,45 @@ action_find:
     mov ah, 09h
     int 21h
 
-    xor si, si              
-    xor bx, bx              
+    xor si, si    ; pointer to the byte in the matrix          
+    xor bx, bx    ; current row         
 find_row:
-    xor di, di              
+    xor di, di    ; current col         
 find_col:
+    ; load current element in eax and compare to the target
     mov eax, matrix[si]
     cmp eax, target
-    jne next_step
+    jne next_step ; skip the output if not equal
     
     inc found_count
-    lea dx, msg_idx_start
-    mov ah, 09h
-    int 21h
-    movzx eax, bx
-    call print_number
-    lea dx, msg_comma
-    mov ah, 09h
-    int 21h
-    movzx eax, di
-    call print_number
-    lea dx, msg_idx_end
+    lea dx, msg_idx_start ; its literally just '['
     mov ah, 09h
     int 21h
 
+    movzx eax, bx         ; output row
+    call print_number
+    lea dx, msg_comma     ; ','
+    mov ah, 09h
+    int 21h
+
+    movzx eax, di          ; output col
+    call print_number
+    lea dx, msg_idx_end    ; ']'
+    mov ah, 09h
+    int 21h
+
+; move to this step if current element !== target
 next_step:
-    add si, 4
-    inc di
-    cmp di, cols
+    add si, 4       ; proceed to the next element
+    inc di          ; proceed to the next col
+    cmp di, cols    ; check if we reached the end of the row
     jl find_col
     
-    inc bx
-    cmp bx, rows
+    inc bx          ; proceed to the next row
+    cmp bx, rows    ; check if we reached the end of the matrix
     jl find_row
     
+    ; if no occurrences were found, output "Not found in matrix."
     cmp found_count, 0
     jne main_menu
     lea dx, msg_not_found
@@ -202,8 +211,7 @@ exit_program:
     mov ax, 4c00h
     int 21h
 
-; --- PROCEDURES ---
-
+; I/O PROCEDURES
 read_input proc near
     push ebx ecx edx esi edi
     
