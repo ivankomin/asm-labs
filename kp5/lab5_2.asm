@@ -3,8 +3,6 @@
 .STACK 100h
 
 ; --- UI & SYSTEM MACROS ---
-
-; Fixed: Using MOV allows us to pass either an OFFSET or a variable value
 M_PRINT_MSG MACRO msg_address
     PUSH DX
     PUSH AX

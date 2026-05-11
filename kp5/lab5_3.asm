@@ -15,7 +15,7 @@ M_PRINT_STR MACRO msg
     pop ax
 ENDM
 
-; Макрос для перевірки меж [-32768..65535]
+; Макрос для перевірки меж 
 ; Директива LOCAL гарантує унікальність міток при кожному розгортанні
 M_CHECK_RANGE MACRO
     LOCAL @@in_bounds, @@out_of_bounds, @@done
